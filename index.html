@@ -568,6 +568,21 @@ function toggleAllSplit(){
   }
 }
 
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbytyk8aTXvE5hGssEF3kg8YIjFqHqrN3jUr7dTKgAGYgGKstWP39nTYZGR4oArGC1sD/exec';
+
+async function syncToSheets(trip, record) {
+  try {
+    await fetch(SHEETS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trip: { name: trip.name }, record })
+    });
+  } catch(e) {
+    console.log('試算表同步失敗:', e);
+  }
+}
+
 async function saveRecord(){
   const t=curTrip();
   if(!t){toast('請先建立旅程');goPage('trips');return;}
@@ -579,12 +594,14 @@ async function saveRecord(){
   if(!selSplit.length){toast('請選擇分帳者');return;}
   const rate=selCurr==='TWD'?1:currentRate;
   const amountTWD=amt*rate;
-  t.records.push({
+  const record={
     id:'r'+Date.now(),date:selDate||todayStr(),
     item,cat:selCat,currency:selCurr,amount:amt,rate,amountTWD,
     payer:selPayer,splitMembers:[...selSplit]
-  });
+  };
+  t.records.push(record);
   await save();
+  syncToSheets(t, record);
   document.getElementById('inp-amount').value='';
   document.getElementById('inp-item').value='';
   document.getElementById('twd-sub').textContent='';
