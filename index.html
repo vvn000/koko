@@ -25,6 +25,20 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'PingFang TC', sans-serif; color: var(--text); }
+.pw-screen { position: fixed; inset: 0; background: var(--bg); z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; }
+.pw-logo { font-size: 48px; margin-bottom: 16px; }
+.pw-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.pw-subtitle { font-size: 14px; color: var(--text2); margin-bottom: 40px; }
+.pw-dots { display: flex; gap: 16px; margin-bottom: 32px; }
+.pw-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--surface2); border: 2px solid rgba(0,0,0,.1); transition: all .15s; }
+.pw-dot.filled { background: var(--green-dark); border-color: var(--green-dark); }
+.pw-dot.error { background: var(--danger); border-color: var(--danger); }
+.pw-error { font-size: 13px; color: var(--danger); margin-bottom: 16px; min-height: 18px; font-weight: 500; text-align: center; }
+.pw-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 280px; }
+.pw-key { padding: 18px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); font-size: 22px; font-weight: 600; color: var(--text); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .1s; aspect-ratio: 1; }
+.pw-key:active { transform: scale(.93); background: var(--green-light); }
+.pw-key.del { font-size: 18px; background: transparent; box-shadow: none; color: var(--text2); }
+.pw-key.empty { background: transparent; box-shadow: none; pointer-events: none; }
 .nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 0.5px solid rgba(0,0,0,.06); display: flex; z-index: 100; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
 .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 4px 2px; }
 .nav-btn.active { color: var(--text); }
@@ -141,6 +155,34 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'P
 </style>
 </head>
 <body>
+<!-- PASSWORD SCREEN -->
+<div class="pw-screen" id="pw-screen">
+  <div class="pw-logo">✈️</div>
+  <div class="pw-title">旅遊記帳</div>
+  <div class="pw-subtitle">請輸入密碼</div>
+  <div class="pw-dots" id="pw-dots">
+    <div class="pw-dot" id="d0"></div>
+    <div class="pw-dot" id="d1"></div>
+    <div class="pw-dot" id="d2"></div>
+    <div class="pw-dot" id="d3"></div>
+  </div>
+  <div class="pw-error" id="pw-error"></div>
+  <div class="pw-keypad">
+    <button class="pw-key" onclick="pwInput('1')">1</button>
+    <button class="pw-key" onclick="pwInput('2')">2</button>
+    <button class="pw-key" onclick="pwInput('3')">3</button>
+    <button class="pw-key" onclick="pwInput('4')">4</button>
+    <button class="pw-key" onclick="pwInput('5')">5</button>
+    <button class="pw-key" onclick="pwInput('6')">6</button>
+    <button class="pw-key" onclick="pwInput('7')">7</button>
+    <button class="pw-key" onclick="pwInput('8')">8</button>
+    <button class="pw-key" onclick="pwInput('9')">9</button>
+    <div class="pw-key empty"></div>
+    <button class="pw-key" onclick="pwInput('0')">0</button>
+    <button class="pw-key del" onclick="pwDel()">⌫</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 <div class="sync-status" id="sync-status"></div>
 
@@ -622,13 +664,14 @@ function renderTrips(){
     const cur=t.id===S.currentTripId;
     const total=Math.round((t.records||[]).reduce((s,r)=>s+(r.amountTWD||0),0));
     return `<div class="trip-card ${cur?'current':''}" onclick="setTrip('${t.id}')">
-      <div>
+      <div style="flex:1;">
         <div class="trip-name">${t.name}</div>
         <div class="trip-meta">${t.members.join('、')} · ${(t.records||[]).length}筆 · ${t.currencies.join('/')}</div>
       </div>
-      <div style="text-align:right;">
+      <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
         ${cur?'<div class="active-badge">使用中</div>':''}
         <div style="font-size:12px;color:var(--text3);">TWD ${total.toLocaleString()}</div>
+        <button onclick="deleteTrip('${t.id}',event)" style="padding:4px 10px;border-radius:20px;background:#FEE8E8;color:var(--danger);border:none;font-size:11px;cursor:pointer;">刪除</button>
       </div>
     </div>`;
   }).join('');
@@ -874,7 +917,72 @@ function renderStats(){
   },50);
 }
 
-init();
+// PASSWORD
+const CORRECT_PW = '1216';
+const PW_KEY = 'travelsplit_auth';
+let pwInput_val = '';
+
+function checkAuth() {
+  if(localStorage.getItem(PW_KEY) === 'ok') {
+    document.getElementById('pw-screen').style.display = 'none';
+    init();
+  } else {
+    document.getElementById('pw-screen').style.display = 'flex';
+  }
+}
+
+function pwInput(n) {
+  if(pwInput_val.length >= 4) return;
+  pwInput_val += n;
+  updateDots();
+  if(pwInput_val.length === 4) {
+    setTimeout(() => {
+      if(pwInput_val === CORRECT_PW) {
+        localStorage.setItem(PW_KEY, 'ok');
+        document.getElementById('pw-screen').style.display = 'none';
+        init();
+      } else {
+        document.querySelectorAll('.pw-dot').forEach(d => d.classList.add('error'));
+        document.getElementById('pw-error').textContent = '密碼錯誤，請再試一次';
+        setTimeout(() => {
+          pwInput_val = '';
+          updateDots();
+          document.querySelectorAll('.pw-dot').forEach(d => d.classList.remove('error'));
+          document.getElementById('pw-error').textContent = '';
+        }, 800);
+      }
+    }, 100);
+  }
+}
+
+function pwDel() {
+  if(!pwInput_val.length) return;
+  pwInput_val = pwInput_val.slice(0, -1);
+  updateDots();
+}
+
+function updateDots() {
+  for(let i=0; i<4; i++) {
+    const d = document.getElementById('d'+i);
+    d.classList.toggle('filled', i < pwInput_val.length);
+  }
+}
+
+// DELETE TRIP
+function deleteTrip(id, e) {
+  e.stopPropagation();
+  if(!confirm('確定要刪除這個旅程？此動作無法復原。')) return;
+  S.trips = S.trips.filter(t => t.id !== id);
+  if(S.currentTripId === id) {
+    S.currentTripId = S.trips.length ? S.trips[0].id : null;
+    refreshAddPage();
+  }
+  save();
+  renderTrips();
+  toast('旅程已刪除');
+}
+
+checkAuth();
 </script>
 </body>
 </html>
