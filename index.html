@@ -494,7 +494,7 @@ function init(){
 
   refreshAddPage();
   renderTrips();
-  document.getElementById('sync-status').textContent = '連線中...';
+  // 連線中
 }
 
 function onDateChange(){
@@ -969,20 +969,59 @@ function updateDots() {
 }
 
 // DELETE TRIP
+const DEL_PW = '0000';
+let deletingTripId = null;
+
 function deleteTrip(id, e) {
   e.stopPropagation();
-  if(!confirm('確定要刪除這個旅程？此動作無法復原。')) return;
-  S.trips = S.trips.filter(t => t.id !== id);
-  if(S.currentTripId === id) {
+  deletingTripId = id;
+  const t = S.trips.find(x => x.id === id);
+  document.getElementById('del-trip-name').textContent = t ? t.name : '';
+  document.getElementById('del-trip-count').textContent = t ? (t.records||[]).length : 0;
+  document.getElementById('del-pw-inp').value = '';
+  document.getElementById('del-pw-error').textContent = '';
+  openModal('modal-del-trip');
+}
+
+function confirmDeleteTrip() {
+  const pw = document.getElementById('del-pw-inp').value;
+  if(pw !== DEL_PW) {
+    document.getElementById('del-pw-error').textContent = '密碼錯誤';
+    document.getElementById('del-pw-inp').value = '';
+    return;
+  }
+  S.trips = S.trips.filter(t => t.id !== deletingTripId);
+  if(S.currentTripId === deletingTripId) {
     S.currentTripId = S.trips.length ? S.trips[0].id : null;
     refreshAddPage();
   }
   save();
+  closeModal('modal-del-trip');
   renderTrips();
   toast('旅程已刪除');
 }
 
 checkAuth();
 </script>
+<!-- MODAL: DELETE TRIP -->
+<div class="modal-overlay" id="modal-del-trip">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">刪除旅程</div>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:6px;line-height:1.6;">
+      確定要刪除「<span id="del-trip-name" style="font-weight:700;color:var(--text);"></span>」？
+    </p>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:20px;">
+      此旅程共有 <span id="del-trip-count"></span> 筆消費紀錄，刪除後無法復原。
+    </p>
+    <div class="mfield">
+      <label>請輸入管理員密碼</label>
+      <input class="minp" id="del-pw-inp" type="password" placeholder="請輸入密碼" inputmode="numeric">
+      <div id="del-pw-error" style="font-size:12px;color:var(--danger);margin-top:6px;min-height:16px;"></div>
+    </div>
+    <button class="mbtn danger" onclick="confirmDeleteTrip()">確定刪除</button>
+    <button class="mbtn ghost" onclick="closeModal('modal-del-trip')">取消</button>
+  </div>
+</div>
 </body>
 </html>
